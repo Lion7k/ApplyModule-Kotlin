@@ -2,6 +2,10 @@ package com.liuzq.httplibrary
 
 import android.app.Application
 import android.content.Context
+import com.liuzq.httplibrary.download.DownloadRetrofit
+import com.liuzq.httplibrary.http.GlobalRxHttp
+import io.reactivex.Observable
+import okhttp3.ResponseBody
 
 class RxHttpUtils private constructor() {
 
@@ -23,24 +27,34 @@ class RxHttpUtils private constructor() {
                 return INSTANCE!!
             }
 
-        lateinit var context: Application
+        private var context: Application? = null
 
-        fun getContext(): Context {
+        fun getContext(): Context? {
             checkInitialize()
             return context
         }
 
-        fun config() {
-            checkInitialize()
-        }
-
         private fun checkInitialize() {
-            context != null ?: throw ExceptionInInitializerError("请先在全局Application中调用 RxHttpUtils.getInstance().init(this) 初始化！")
+            if (context == null) {
+                throw ExceptionInInitializerError("请先在全局Application中调用 RxHttpUtils.getInstance().init(this) 初始化！")
+            }
         }
 
-        fun <K> createApi(cls: Class<K>): K {
 
+        fun <K> createApi(cls: Class<K>): K? {
+            return GlobalRxHttp.createGApi(cls)
         }
+
+        /**
+         * 下载文件
+         *
+         * @param fileUrl 地址
+         * @return ResponseBody
+         */
+        fun downloadFile(fileUrl: String): Observable<ResponseBody>? {
+            return DownloadRetrofit.downloadFile(fileUrl)
+        }
+
     }
 
     fun init(app: Application): RxHttpUtils {
@@ -48,5 +62,8 @@ class RxHttpUtils private constructor() {
         return this
     }
 
-
+    fun config(): GlobalRxHttp {
+        checkInitialize()
+        return GlobalRxHttp.instance
+    }
 }

@@ -1,13 +1,21 @@
 package com.liuzq.httplibrary.config
 
 import android.content.Context
-import com.liuzq.httplibrary.cookie.CookieStore
+import android.text.TextUtils
+import com.liuzq.httplibrary.cookie.CookieJarImpl
+import com.liuzq.httplibrary.cookie.store.CookieStore
+import com.liuzq.httplibrary.http.SSLUtils
 import com.liuzq.httplibrary.interceptor.HeaderInterceptor
+import com.liuzq.httplibrary.interceptor.NetCacheInterceptor
+import com.liuzq.httplibrary.interceptor.NoNetCacheInterceptor
 import com.liuzq.httplibrary.interceptor.RxHttpLogger
+import okhttp3.Cache
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import java.io.File
 import java.io.InputStream
+import java.util.concurrent.TimeUnit
 
 /**
  * desc 统一OkHttp配置信息
@@ -20,8 +28,8 @@ class OkHttpConfig private constructor() {
 
     companion object {
         private var defaultCachePath: String? = null
-        private val defaultCacheSize = (1024 * 1024 * 100).toLong()
-        private val defaultTimeout: Long = 10
+        private const val defaultCacheSize = (1024 * 1024 * 100).toLong()
+        private const val defaultTimeout: Long = 10
 
         private var okHttpClientBuilder: OkHttpClient.Builder? = null
         private var okHttpClient: OkHttpClient? = null
@@ -47,7 +55,7 @@ class OkHttpConfig private constructor() {
         }
     }
 
-    class Builder constructor(context: Context) {
+    class Builder constructor(private val context: Context?) {
         private var headerMaps: Map<String, Any>? = null
         private var isDebug: Boolean = false
         private var isCache: Boolean = false
@@ -170,10 +178,57 @@ class OkHttpConfig private constructor() {
         /**
          * 配饰cookie保存到sp文件中
          */
-        private fun setCookieConfig(){
-            if (null != cookieStore){
-                okHttpClientBuilder?.cookieJar()
+        private fun setCookieConfig() {
+            if (null != cookieStore) {
+                okHttpClientBuilder?.cookieJar(CookieJarImpl(cookieStore))
             }
+        }
+
+        /**
+         * 配置缓存
+         */
+        private fun setCacheConfig() {
+            val externalCacheDir: File = context?.externalCacheDir ?: return
+            defaultCachePath = externalCacheDir.path + "/RxHttpCacheData"
+            if (isCache) {
+                val cache: Cache = if (!TextUtils.isEmpty(cachePath) && cacheMaxSize > 0)
+                    Cache(File(cachePath), cacheMaxSize)
+                else
+                    Cache(File(defaultCachePath), defaultCacheSize)
+
+                okHttpClientBuilder?.cache(cache)
+                        ?.addInterceptor(NoNetCacheInterceptor())
+                        ?.addNetworkInterceptor(NetCacheInterceptor())
+            }
+        }
+
+        /**
+         * 配置超时信息
+         */
+        private fun setTimeout() {
+            okHttpClientBuilder?.readTimeout(if (readTimeout == 0L) defaultTimeout else readTimeout, TimeUnit.SECONDS)
+            okHttpClientBuilder?.writeTimeout(if (writeTimeout == 0L) defaultTimeout else writeTimeout, TimeUnit.SECONDS)
+            okHttpClientBuilder?.connectTimeout(if (connectTimeout == 0L) defaultTimeout else connectTimeout, TimeUnit.SECONDS)
+            okHttpClientBuilder?.retryOnConnectionFailure(true)
+        }
+
+        /**
+         * 配置证书
+         */
+        private fun setSslConfig() {
+            val sslParams: SSLUtils.SSLParams? = if (null == certificates) {
+                //信任所有证书,不安全有风险
+                SSLUtils.getSslSocketFactory()
+            } else {
+                if (null != bksFile && !TextUtils.isEmpty(password)) {
+                    //使用bks证书和密码管理客户端证书（双向认证），使用预埋证书，校验服务端证书（自签名证书）
+                    SSLUtils.getSslSocketFactory(bksFile, password, *certificates!!)
+                } else {
+                    //使用预埋证书，校验服务端证书（自签名证书）
+                    SSLUtils.getSslSocketFactory(*certificates!!)
+                }
+            }
+            okHttpClientBuilder?.sslSocketFactory(sslParams?.sSLSocketFactory!!, sslParams.trustManager!!)
         }
     }
 }

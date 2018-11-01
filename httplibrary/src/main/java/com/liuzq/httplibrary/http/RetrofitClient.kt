@@ -1,5 +1,6 @@
 package com.liuzq.httplibrary.http
 
+import com.liuzq.httplibrary.config.OkHttpConfig
 import com.liuzq.httplibrary.gson.GsonAdapter
 import com.liuzq.httplibrary.interceptor.RxHttpLogger
 import okhttp3.OkHttpClient
@@ -65,7 +66,10 @@ class RetrofitClient private constructor() {
         return mRetrofitBuilder
     }
 
-    fun getRetrofit(): Retrofit {
-        if (null == Ok)
+    fun getRetrofit(): Retrofit? {
+        return if (null == OkHttpConfig.getOkHttpClient())
+            mRetrofitBuilder?.client(okHttpClient!!)?.build()
+        else
+            mRetrofitBuilder?.client(OkHttpConfig.getOkHttpClient()!!)?.build()
     }
 }
